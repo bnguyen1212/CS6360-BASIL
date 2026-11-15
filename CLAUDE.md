@@ -34,7 +34,16 @@ Sample EB-Histogram / CHT is NOT in scope today.
 ## Hard rules
 - INDEPENDENCE: we write the sampling and model-building logic ourselves.
   Do NOT open, read, or copy the authors' sampled-index implementations:
-  <LIST THE FILES/DIRS HERE AFTER THE FIRST EXPLORATION SESSION>.
+  - `indexes/sPGM-index/` (sampled PGM / Sample EB-PLA)
+  - `indexes/sCHT/` (sampled CHT / Sample EB-Histogram)
+  - `indexes/srs/` (sampled RadixSpline)
+  - `indexes/analysis-srmi/` (sampled RMI)
+  - `wrappers/wrapper_spgm_index.h`, `wrappers/wrapper_scht.h`, `wrappers/wrapper_srs.h`,
+    `wrappers/wrapper_srmi_cpp_robust.h`, `wrappers/meta/*` (glue; may contain sampling)
+  - `wrappers/wrapper_srt.h`, `wrappers/wrapper_art_primary_lb.h`, `wrappers/wrapper_ibtree.h`,
+    `wrappers/wrapper_stx_btree.h` (sampled traditional indexes; sampling done in the wrapper)
+  - `utils/pgm_metric.h` (PGM-style optimal PLA from GRE; keep our PLA independent)
+  Use `wrappers/base.h` + `wrappers/wrapper_binary_search.h` as the interface template.
   You MAY read and use the harness: dataset loading, query generation, timing,
   baseline indexes, and the interface a new index must implement. You MAY run the
   authors' indexes as black boxes to compare results.

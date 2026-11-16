@@ -1,12 +1,14 @@
 // Sample EB-PLA build benchmark + exhaustive validation on one dataset.
 //
-// Usage: pla_bench <sosd_file> <num_keys|all> <eps> <csv_out> <I> [I ...]
+// Usage: pla_bench [--untightened] <sosd_file> <num_keys|all> <eps> <csv_out> <I> [I ...]
+//   --untightened: delta = eps (experiment); the checked bound becomes eps + I - 1.
 //
 // Loads ONE copy of the keys with ours::load_sosd_keys (never the harness loader).
 // For each I: builds the model 3 times (timing only the build: sampling + anchor
 // points + cone fit), checks that all 3 builds produce identical segments, then
 // computes the max error over EVERY key once. Appends one CSV row per run.
-// Exits with status 2 as soon as any max error > eps (so a failure stops the sweep).
+// Exits with status 2 as soon as any max error exceeds the guaranteed bound (eps, or
+// eps + I - 1 with --untightened), so a failure stops the sweep.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -20,6 +22,14 @@
 using namespace ours;
 
 int main(int argc, char** argv) {
+  bool untight = false;
+  if (argc > 1 && std::string(argv[1]) == "--untightened") {
+    untight = true;
+    ++argv;
+    --argc;
+  }
+  const SampleEBPLA::Bound mode =
+      untight ? SampleEBPLA::Bound::kUntightened : SampleEBPLA::Bound::kTightened;
   if (argc < 6) {
     std::fprintf(stderr, "usage: %s <sosd_file> <num_keys|all> <eps> <csv_out> <I> [I ...]\n", argv[0]);
     return 1;
@@ -42,7 +52,7 @@ int main(int argc, char** argv) {
   if (!out) { std::perror(csv.c_str()); return 1; }
   std::fseek(out, 0, SEEK_END);
   if (std::ftell(out) == 0)
-    std::fprintf(out, "n,eps,I,run,build_ns,num_samples,num_segments,size_bytes,max_error,mean_error,status\n");
+    std::fprintf(out, "n,eps,I,delta,run,build_ns,num_samples,num_segments,size_bytes,max_error,mean_error,checked_bound,status\n");
 
   int status = 0;
   for (int a = 5; a < argc && status == 0; ++a) {
@@ -54,7 +64,7 @@ int main(int argc, char** argv) {
     bool identical = true;
     for (int r = 0; r < kRuns; ++r) {
       const auto b0 = std::chrono::steady_clock::now();
-      SampleEBPLA m(keys.data(), n, eps, I);
+      SampleEBPLA m(keys.data(), n, eps, I, mode);
       const auto b1 = std::chrono::steady_clock::now();
       build_ns[r] = std::chrono::duration_cast<std::chrono::nanoseconds>(b1 - b0).count();
       samples = m.num_samples(); segs = m.num_segments(); bytes = m.size_in_bytes();
@@ -69,19 +79,21 @@ int main(int argc, char** argv) {
                       s[g].slope == first_segs[g].slope && s[g].clamp_hi == first_segs[g].clamp_hi;
       }
     }
-    const bool ok = st.max_error <= eps && identical;
+    const size_t delta = untight ? eps : eps - I + 1;
+    const size_t bound = untight ? eps + I - 1 : eps;  // what the proof guarantees
+    const bool ok = st.max_error <= bound && identical;
     for (int r = 0; r < kRuns; ++r)
-      std::fprintf(out, "%zu,%zu,%zu,%d,%llu,%zu,%zu,%zu,%llu,%.4f,%s\n", n, eps, I, r + 1,
-                   (unsigned long long)build_ns[r], samples, segs, bytes,
-                   (unsigned long long)st.max_error, st.mean_error, ok ? "ok" : "FAIL");
+      std::fprintf(out, "%zu,%zu,%zu,%zu,%d,%llu,%zu,%zu,%zu,%llu,%.4f,%zu,%s\n", n, eps, I, delta,
+                   r + 1, (unsigned long long)build_ns[r], samples, segs, bytes,
+                   (unsigned long long)st.max_error, st.mean_error, bound, ok ? "ok" : "FAIL");
     std::fflush(out);
-    std::printf("n=%zu eps=%zu I=%-4zu build_ms=[%.1f %.1f %.1f] segs=%zu bytes=%zu max_err=%llu mean_err=%.2f %s\n",
-                n, eps, I, build_ns[0] / 1e6, build_ns[1] / 1e6, build_ns[2] / 1e6, segs, bytes,
+    std::printf("n=%zu eps=%zu I=%-4zu delta=%zu bound=%zu build_ms=[%.1f %.1f %.1f] segs=%zu bytes=%zu max_err=%llu mean_err=%.2f %s\n",
+                n, eps, I, delta, bound, build_ns[0] / 1e6, build_ns[1] / 1e6, build_ns[2] / 1e6, segs, bytes,
                 (unsigned long long)st.max_error, st.mean_error, ok ? "ok" : "FAIL");
     if (!ok) {
-      std::printf("FAILURE: %s at i=%zu key=%llu (max_error=%llu > eps=%zu)\n",
+      std::printf("FAILURE: %s at i=%zu key=%llu (max_error=%llu, bound=%zu)\n",
                   identical ? "error bound violated" : "non-deterministic build", st.argmax,
-                  (unsigned long long)keys[st.argmax], (unsigned long long)st.max_error, eps);
+                  (unsigned long long)keys[st.argmax], (unsigned long long)st.max_error, bound);
       status = 2;
     }
   }

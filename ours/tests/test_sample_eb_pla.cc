@@ -102,6 +102,12 @@ static Keys sorted(Keys k) {
   return k;
 }
 
+static bool util_is_unique(const Keys& k) {
+  for (size_t i = 1; i < k.size(); ++i)
+    if (k[i] == k[i - 1]) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------- data generators
 static Keys uniform_keys(size_t n, uint64_t seed) {
   std::mt19937_64 rng(seed);
@@ -320,6 +326,54 @@ static void test_key_extremes() {
   check_all_configs(big, "dense at UINT64_MAX", {0, 4, 64});
 }
 
+// Untightened experiment mode: delta = eps, allowed for any I >= 1, and the
+// guarantee becomes eps + I - 1 (same proof with delta = eps).
+static void test_untightened_mode() {
+  const std::vector<Keys> datasets = {uniform_keys(200000, 31), heavy_dup_keys(200000, 32, 500),
+                                      mixed_keys(200000, 33), skewed_keys(200000, 34)};
+  for (const Keys& k : datasets)
+    for (size_t eps : {0, 4, 64, 256})
+      for (size_t I : {1, 2, 16, 64, 256, 300}) {
+        SampleEBPLA m(k.data(), k.size(), eps, I, SampleEBPLA::Bound::kUntightened);
+        CHECK(m.delta() == eps, "delta");
+        const auto st = max_error(m, k.data(), k.size());
+        CHECK(st.max_error <= eps + I - 1, "untightened eps=%zu I=%zu max_err=%llu", eps, I,
+              (unsigned long long)st.max_error);
+      }
+}
+
+// Sample points use the ARRAY INDEX j*I (and n-1), never the sample ordinal j.
+// On duplicate-free data every anchor point is exactly (keys[j*I], j*I).
+static void check_positions(const Keys& k, size_t I, const char* what) {
+  const auto s = systematic_sample(k.data(), k.size(), I);
+  for (size_t j = 0; j < s.size(); ++j) {
+    const size_t expect = (j + 1 == s.size()) ? k.size() - 1 : j * I;
+    if (s[j].index != expect || s[j].key != k[expect]) {
+      CHECK(false, "%s I=%zu sample %zu has index %zu, expected %zu", what, I, j, s[j].index, expect);
+      return;
+    }
+  }
+  if (util_is_unique(k)) {
+    const auto pts = anchor_points(k.data(), k.size(), s);
+    CHECK(pts.size() == s.size(), "%s I=%zu: unique data must give one point per sample", what, I);
+    for (size_t j = 0; j < pts.size() && j < s.size(); ++j)
+      if (pts[j].x != s[j].key || pts[j].y != s[j].index) {
+        CHECK(false, "%s I=%zu point %zu = (%llu,%llu), expected (key[%zu], %zu)", what, I, j,
+              (unsigned long long)pts[j].x, (unsigned long long)pts[j].y, s[j].index, s[j].index);
+        return;
+      }
+  }
+}
+
+static void test_sample_positions() {
+  for (size_t I : {1, 3, 16, 64, 256}) {
+    check_positions(uniform_keys(100003, 41), I, "uniform");
+    Keys k(5000);
+    for (size_t i = 0; i < k.size(); ++i) k[i] = 7 * i + 3;  // unique, 7i+3 != i
+    check_positions(k, I, "7i+3");
+  }
+}
+
 static void test_history_slice(const std::string& path, size_t num_keys) {
   const Keys k = load_sosd_keys(path, num_keys);
   std::printf("    loaded %zu keys from %s (one copy, %.0f MB)\n", k.size(), path.c_str(),
@@ -327,6 +381,7 @@ static void test_history_slice(const std::string& path, size_t num_keys) {
   for (size_t I : {1, 16, 64, 256}) check_model(k, 256, I, "history slice", true);
   check_model(k, 16, 1, "history slice", true);
   check_model(k, 16, 17, "history slice", true);
+  for (size_t I : {1, 16, 64, 256}) check_positions(k, I, "history slice");
 }
 
 int main(int argc, char** argv) {
@@ -343,6 +398,8 @@ int main(int argc, char** argv) {
   run_test("duplicates: dup_run_then_close_keys", test_dup_run_then_close_keys);
   run_test("mixed fuzz (40 seeds)", test_mixed_fuzz);
   run_test("keys near UINT64_MAX", test_key_extremes);
+  run_test("untightened mode: max err <= eps + I - 1", test_untightened_mode);
+  run_test("sample points use index j*I (not j)", test_sample_positions);
   if (argc >= 2) {
     const size_t num = argc >= 3 ? std::strtoull(argv[2], nullptr, 10) : 10000000;
     run_test("history slice", [&] { test_history_slice(argv[1], num); });

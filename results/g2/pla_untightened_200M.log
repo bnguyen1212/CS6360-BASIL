@@ -1,0 +1,27 @@
+loaded 200000000 keys in 1.9 s (one copy, 1600 MB)
+n=200000000 eps=256 I=16   delta=256 bound=271 build_ms=[787.7 629.2 442.0] segs=10459 bytes=418360 max_err=271 mean_err=102.15 ok
+n=200000000 eps=256 I=64   delta=256 bound=319 build_ms=[200.0 224.6 202.1] segs=10197 bytes=407880 max_err=316 mean_err=101.70 ok
+n=200000000 eps=256 I=256  delta=256 bound=511 build_ms=[80.6 79.1 84.6] segs=9624 bytes=384960 max_err=496 mean_err=101.75 ok
+	Command being timed: "./build/ours/pla_bench --untightened data/history_200M_uint64 all 256 results/g2/pla_untightened.csv 16 64 256"
+	User time (seconds): 34.18
+	System time (seconds): 2.58
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:36.83
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1957812
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 776685
+	Voluntary context switches: 1
+	Involuntary context switches: 257
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

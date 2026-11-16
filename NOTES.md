@@ -264,3 +264,55 @@ Toolchain: Ubuntu clang 18.1.3, cmake 3.28.3.
   O(segments), and the I=1 baseline time would then stop including the allocation
   of two 3.2 GB vectors. We should decide this before comparing build times against BASIL.
 - The model costs 40 B per segment (a 32 B `Segment` plus an 8 B first key).
+
+## G2 prep: black-box check of the authors' sPGM (2026-11-15), in `results/g2/`
+`ours/blackbox/spgm_probe.cc` includes `wrappers/wrapper_spgm_index.h` and uses only
+the harness contract: `Build` returns ns, and `EqualityLookup` returns `[start, stop)`.
+**We did not read the authors' index or wrapper code.** Template parameters are as
+documented in README §3.4. The probe is compiled with the harness flags
+(`-ffast-math -fopenmp -march=native -O3`), and the keys are loaded once, straight
+into the `KeyValue` vector that `Build` needs (3.2 GB; peak RSS 3.0 GiB).
+
+1. **Each config really used its I.** At runtime, `variant()` prints `256/1/4/1`,
+   `256/16/4/1`, `256/64/4/1` and `256/256/4/1`, the same strings as in the G0 logs, and
+   the sizes match G0 to the byte. In this low-noise process the median build time
+   falls with I: 5.05 s, 0.51 s, 0.23 s, 0.070 s for I = 1, 16, 64, 256 (raw data in
+   `spgm_probe_200M.csv`). The G0 timings were too noisy to show this.
+2. **Their error at eps=256, I=256 is not <= 256.** We queried every one of the 200M keys:
+
+   | I | bound width (unclipped) | keys outside bound | max error (from bound centre) | size B |
+   |---:|---:|---:|---:|---:|
+   | 1   | 514  = 2(256+1)   | 0 | 256 | 137,256 |
+   | 16  | 544  = 2(256+16)  | 0 | 270 | 135,704 |
+   | 64  | 640  = 2(256+64)  | 0 | 316 | 132,264 |
+   | 256 | 1024 = 2(256+256) | 0 | **482** | 124,352 |
+
+   The returned bound is `prediction ± (eps + I)`, roughly. So the `eps` template
+   argument behaves like the PLA's delta on the samples, with NO tightening, and the
+   search window is widened by I to stay correct. Lookups are always correct (0 keys
+   outside their bound), but the guaranteed error is about eps + I - 1 = 511 (482
+   measured), not eps. The "max error from bound centre" assumes the bound is
+   symmetric around the prediction, which the constant widths support; it is
+   accurate to about ±1.
+3. **Ours with no tightening** (`pla_bench --untightened`, delta = eps, which
+   guarantees eps + I - 1), 200M keys:
+
+   | I | segments | size B | max err | bound | build ms (median) |
+   |---:|---:|---:|---:|---:|---:|
+   | 16  | 10,459 | 418,360 | 271 | 271 | 629 |
+   | 64  | 10,197 | 407,880 | 316 | 319 | 202 |
+   | 256 | 9,624  | 384,960 | 496 | 511 | 81  |
+
+   Untightened, our size also falls slowly with I, as theirs does. Theirs grows
+   instead of shrinking only if you hold the true error fixed. But we are still
+   **3.1x larger than their 124 KB** at I=256. Likely causes, neither verified: our
+   40 B per segment (their bytes per segment are unknown), and greedy-cone vs
+   optimal PLA giving more segments.
+4. **Sample points use the array index j*I.** The sampler steps `j += I` over array
+   indices and stores that index, never the ordinal. The new test "sample points
+   use index j*I (not j)" checks that every sample index is j*I (or n-1). On unique
+   data it also checks that every anchor point is exactly (key[j*I], j*I). It passes
+   on synthetic data and on the 10M history slice.
+- **Consequence for comparisons:** "eps" means different things. Our eps is the true
+   max error; their eps is about the true error minus (I - 1). To compare at equal
+   true error, run ours at eps_ours = eps_theirs + I - 1, or ours untightened.

@@ -19,3 +19,13 @@ add_test(NAME test_sample_eb_pla COMMAND test_sample_eb_pla)
 # Build-time + exhaustive-error benchmark (G1). See ours/bench/pla_bench.cc for usage.
 add_executable(pla_bench bench/pla_bench.cc)
 target_compile_options(pla_bench PRIVATE -Wall -Wextra -march=native)
+
+# Black-box probe of the AUTHORS' sPGM (G2 prep). Compiles their wrapper header as-is,
+# with the harness's flags (-ffast-math, OpenMP), so it behaves as it does inside BASIL.
+# We do not read that code; see ours/blackbox/spgm_probe.cc for what is measured.
+find_package(OpenMP REQUIRED)
+find_package(Threads REQUIRED)
+add_executable(spgm_probe blackbox/spgm_probe.cc)
+target_include_directories(spgm_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_options(spgm_probe PRIVATE -ffast-math -march=native -w)
+target_link_libraries(spgm_probe PRIVATE OpenMP::OpenMP_CXX Threads::Threads)

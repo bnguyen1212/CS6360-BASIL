@@ -1,0 +1,32 @@
+loaded 10000000 keys into KeyValue vector (160 MB)
+sPGM variant=256/1/4/1 name=sPGM n=10000000 eps=256 I=1 build_ms=176.6 size=1744 width=[256,514] not_contained=0 max_center_err=256 max_edge_dist=513
+  build_ms runs: 176.6 168.5 208.5
+sPGM variant=256/16/4/1 name=sPGM n=10000000 eps=256 I=16 build_ms=23.1 size=1744 width=[271,544] not_contained=0 max_center_err=265 max_edge_dist=537
+  build_ms runs: 23.1 18.6 18.7
+sPGM variant=256/64/4/1 name=sPGM n=10000000 eps=256 I=64 build_ms=7.5 size=1680 width=[319,640] not_contained=0 max_center_err=300 max_edge_dist=620
+  build_ms runs: 7.5 7.4 7.0
+sPGM variant=256/256/4/1 name=sPGM n=10000000 eps=256 I=256 build_ms=2.4 size=1568 width=[511,1024] not_contained=0 max_center_err=439 max_edge_dist=951
+  build_ms runs: 2.4 2.4 2.5
+	Command being timed: "./build/ours/spgm_probe data/history_200M_uint64 10000000 results/g2/spgm_probe_10M.csv"
+	User time (seconds): 2.05
+	System time (seconds): 0.17
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:02.23
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 168064
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 1
+	Minor (reclaiming a frame) page faults: 41275
+	Voluntary context switches: 9
+	Involuntary context switches: 14
+	Swaps: 0
+	File system inputs: 181184
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -148,16 +148,24 @@ class SampleEBPLA {
     uint64_t clamp_hi;   // y of the next segment's first anchor point (n-1 for the last)
   };
 
+  // kTightened (the default and the real algorithm): delta = eps - I + 1, which
+  //   guarantees max error <= eps over every key.
+  // kUntightened (an experiment only): delta = eps, so the samples are fitted with
+  //   the full eps. The same proof (with delta = eps) then gives only
+  //   max error <= eps + I - 1. Use it to compare against indexes that do not tighten.
+  enum class Bound { kTightened, kUntightened };
+
   // Builds the model. keys[0..n-1] sorted ascending; the array is NOT copied.
-  // Throws std::invalid_argument unless n >= 1 and 1 <= I <= eps + 1.
-  SampleEBPLA(const uint64_t* keys, size_t n, size_t eps, size_t I)
+  // Throws std::invalid_argument unless n >= 1, I >= 1, and (if tightened) I <= eps + 1.
+  SampleEBPLA(const uint64_t* keys, size_t n, size_t eps, size_t I,
+              Bound bound = Bound::kTightened)
       : n_(n), eps_(eps), I_(I) {
     if (n == 0) throw std::invalid_argument("SampleEBPLA: empty key array");
     if (I == 0) throw std::invalid_argument("SampleEBPLA: I must be >= 1");
-    if (I > eps + 1)
+    if (bound == Bound::kTightened && I > eps + 1)
       throw std::invalid_argument("SampleEBPLA: need I <= eps + 1 (got I=" +
                                   std::to_string(I) + ", eps=" + std::to_string(eps) + ")");
-    delta_ = eps - I + 1;
+    delta_ = bound == Bound::kTightened ? eps - I + 1 : eps;
 
     const std::vector<SamplePoint> samples = systematic_sample(keys, n, I);
     const std::vector<AnchorPoint> pts = anchor_points(keys, n, samples);

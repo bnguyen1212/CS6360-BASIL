@@ -316,3 +316,51 @@ into the `KeyValue` vector that `Build` needs (3.2 GB; peak RSS 3.0 GiB).
 - **Consequence for comparisons:** "eps" means different things. Our eps is the true
    max error; their eps is about the true error minus (I - 1). To compare at equal
    true error, run ours at eps_ours = eps_theirs + I - 1, or ours untightened.
+
+## G2: two-level index + lookup (2026-11-15), in `results/g2/lookup*.{csv,log}`
+- Code: `ours/segment_directory.h` is **level 2**: a binary search over the segments'
+  first keys, kept separate so a recursive PLA can replace it. `ours/sample_eb_pla.h`
+  is **level 1**: the segments, with clamped prediction. `ours/lookup.h` holds
+  `SampleEBPLAIndex::lookup`: predict p, then `std::lower_bound` over
+  `[max(0,p-e), min(n-1,p+e)]` with e = `error_bound()`. That is eps for the tightened
+  model (all G2 numbers below) and eps+I-1 for the untightened one. The key array is
+  referenced, never copied. Lookups are guaranteed only for keys present in the array.
+- Unit tests now check `lookup(key) == lower_bound` for EVERY key of every synthetic
+  array, tightened and untightened, plus the 10M history slice: 7,797,616 checks,
+  0 failures. Ablation (scratchpad only): shrinking the window by 1 makes 10 test
+  groups fail.
+- Benchmark: `./build/ours/lookup_bench data/history_200M_uint64 <10000000|all> 256 results/g2/lookup.csv 10000000 <all|random> 1 16 64 256`.
+  The keys are loaded once. The 10M random existing keys use seed 20261115 and are
+  drawn uniformly over positions; the same set is used for every config. The
+  reference answers come from `std::lower_bound` over the whole array. There are 3
+  timed runs per config, and every timed run's checksum is verified.
+- **Correctness: 0 wrong answers.** On the 10M slice all 10,000,000 keys were checked;
+  on 200M, 10,000,000 random existing keys. That holds for every I in {1, 16, 64, 256}.
+
+| keys | index | I | segments | model bytes | avg lookup ns (3 runs) |
+|---|---|---:|---:|---:|---|
+| 10M  | binary search | – | – | 0 | 620.8 / 561.6 / 558.3 |
+| 10M  | ours eps=256 | 1   | 140     | 5,600      | 355.7 / 346.2 / 333.5 |
+| 10M  | ours eps=256 | 16  | 146     | 5,840      | 360.0 / 366.7 / 355.5 |
+| 10M  | ours eps=256 | 64  | 204     | 8,160      | 335.5 / 390.8 / 365.4 |
+| 10M  | ours eps=256 | 256 | 18,472  | 738,880    | 454.8 / 411.5 / 424.2 |
+| 200M | binary search | – | – | 0 | 1532.8 / 1538.3 / 1057.7 |
+| 200M | ours eps=256 | 1   | 10,609  | 424,360    | 628.5 / 628.4 / 553.0 |
+| 200M | ours eps=256 | 16  | 11,144  | 445,760    | 487.7 / 510.1 / 500.8 |
+| 200M | ours eps=256 | 64  | 13,676  | 547,040    | 484.7 / 492.2 / 488.3 |
+| 200M | ours eps=256 | 256 | 373,805 | 14,952,200 | 637.4 / 827.5 / 653.3 |
+
+- Peak RSS on 200M was 7.6 GiB: 1.6 GB of keys, 160 MB of queries and answers, and
+  the transient ~6.4 GB of the I=1 build. There were no major faults.
+- Reading the numbers:
+  * At I=256 the 15 MB model is larger than the 6 MB L3, so the level-2 search
+    misses cache. A recursive level 2 is the fix to try.
+  * At 200M, I=1 is about 25% slower than I=16 although their models are nearly
+    identical. **Unexplained.** It could be measurement order: I=1 is timed right
+    after freeing the ~6.4 GB build vectors. Rerun with a different config order
+    before drawing conclusions.
+  * Run-to-run noise is up to about 30% (binary search 1058–1538 ns). Same WSL2 caveat as G0.
+  * These numbers are not comparable to BASIL's latencies. The harness searches
+    16 B `Row`s and sums the values of duplicate rows; we search the 8 B key array.
+    A fair comparison needs our index inside the harness (BASIL wrapper, next step),
+    at equal guaranteed error (see CLAUDE.md).

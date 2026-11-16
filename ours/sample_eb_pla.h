@@ -103,6 +103,7 @@
 #include <vector>
 
 #include "sampler.h"
+#include "segment_directory.h"
 
 namespace ours {
 
@@ -166,6 +167,7 @@ class SampleEBPLA {
       throw std::invalid_argument("SampleEBPLA: need I <= eps + 1 (got I=" +
                                   std::to_string(I) + ", eps=" + std::to_string(eps) + ")");
     delta_ = bound == Bound::kTightened ? eps - I + 1 : eps;
+    error_bound_ = bound == Bound::kTightened ? eps : eps + I - 1;
 
     const std::vector<SamplePoint> samples = systematic_sample(keys, n, I);
     const std::vector<AnchorPoint> pts = anchor_points(keys, n, samples);
@@ -173,22 +175,22 @@ class SampleEBPLA {
     num_points_ = pts.size();
     fit_shrinking_cone(pts);
 
-    first_keys_.reserve(segments_.size());
+    std::vector<uint64_t> first_keys;
+    first_keys.reserve(segments_.size());
     for (size_t g = 0; g < segments_.size(); ++g) {
-      first_keys_.push_back(segments_[g].first_key);
+      first_keys.push_back(segments_[g].first_key);
       segments_[g].clamp_hi = (g + 1 < segments_.size()) ? segments_[g + 1].y0 : n - 1;
     }
+    directory_ = SegmentDirectory(std::move(first_keys));
   }
 
   // Predicted position of key x (meaningful for keys in the array; any x is safe).
   uint64_t predict(uint64_t x) const {
-    // Segment g = last segment with first_key <= x. Keys below the first key go to
-    // segment 0 (its y0 is 0). Binary search over first keys for now; the
-    // two-level index (G2) will replace this.
-    size_t g = static_cast<size_t>(
-        std::upper_bound(first_keys_.begin(), first_keys_.end(), x) - first_keys_.begin());
-    if (g == 0) return segments_[0].y0;
-    const Segment& s = segments_[g - 1];
+    // Level 2: find the segment covering x. Keys below the first key go to segment 0;
+    // since its y0 is 0, the line is not evaluated to the left of its anchor.
+    const Segment& s = segments_[directory_.find(x)];
+    if (x < s.first_key) return s.y0;
+    // Level 1: evaluate that segment's line.
     const double p = static_cast<double>(s.y0) +
                      s.slope * static_cast<double>(x - s.first_key);
     const double cap = static_cast<double>(s.clamp_hi);
@@ -203,10 +205,13 @@ class SampleEBPLA {
   size_t eps() const { return eps_; }
   size_t interval() const { return I_; }
   size_t delta() const { return delta_; }
+  // Guaranteed max |predict(key) - pos(key)| over every key: eps if tightened,
+  // eps + I - 1 if untightened. The lookup's search window uses this.
+  size_t error_bound() const { return error_bound_; }
   size_t n() const { return n_; }
   const std::vector<Segment>& segments() const { return segments_; }
   size_t size_in_bytes() const {
-    return segments_.size() * sizeof(Segment) + first_keys_.size() * sizeof(uint64_t);
+    return segments_.size() * sizeof(Segment) + directory_.size_in_bytes();
   }
 
  private:
@@ -234,10 +239,10 @@ class SampleEBPLA {
     }
   }
 
-  size_t n_, eps_, I_, delta_ = 0;
+  size_t n_, eps_, I_, delta_ = 0, error_bound_ = 0;
   size_t num_samples_ = 0, num_points_ = 0;
   std::vector<Segment> segments_;
-  std::vector<uint64_t> first_keys_;  // segments_[g].first_key, contiguous for search
+  SegmentDirectory directory_;  // level 2 over segments_[g].first_key
 };
 
 }  // namespace ours

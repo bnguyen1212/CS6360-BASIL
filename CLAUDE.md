@@ -30,6 +30,11 @@ Sample EB-Histogram / CHT is NOT in scope today.
 - Lookup: predict p, then binary-search [max(0, p - eps), min(n - 1, p + eps)].
 - Two-level index: level 1 = our segments; level 2 = a small structure over segment
   first-keys (binary search is fine for today; recursive PLA as in PGM is the upgrade).
+- COMPARING WITH BASIL's sPGM: their `eps` template argument is NOT the guaranteed error.
+  Measured as a black box, their search bound is about prediction ± (eps + I), and the
+  true error reaches about eps + I - 1 (NOTES.md, G2 prep). Always compare at EQUAL
+  guaranteed error: ours tightened at eps' = eps + I - 1 vs. theirs at eps, OR ours
+  untightened (`Bound::kUntightened`) vs. theirs at the same eps and I.
 
 ## Hard rules
 - INDEPENDENCE: we write the sampling and model-building logic ourselves.

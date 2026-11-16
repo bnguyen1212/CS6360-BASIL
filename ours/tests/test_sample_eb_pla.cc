@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../error.h"
+#include "../lookup.h"
 #include "../sample_eb_pla.h"
 #include "../sampler.h"
 #include "../sosd_io.h"
@@ -45,6 +46,31 @@ static void run_test(const char* name, const std::function<void()>& fn) {
 }
 
 // ---------------------------------------------------------------- helpers
+// Every key x of the array must look up to its exact lower_bound position, and the
+// window must have radius error_bound() (checked against an independent std::lower_bound).
+static void check_lookups(const Keys& keys, size_t eps, size_t I, SampleEBPLA::Bound bound,
+                          const char* what) {
+  SampleEBPLAIndex idx(keys.data(), keys.size(), eps, I, bound);
+  const size_t e = bound == SampleEBPLA::Bound::kTightened ? eps : eps + I - 1;
+  CHECK(idx.search_radius() == e, "%s radius", what);
+  size_t pos = 0;
+  for (size_t i = 0; i < keys.size(); ++i) {
+    if (i == 0 || keys[i] != keys[i - 1]) pos = i;
+    const size_t got = idx.lookup(keys[i]);
+    if (got != pos) {
+      const SearchWindow w = idx.window(keys[i]);
+      CHECK(false, "%s n=%zu eps=%zu I=%zu: lookup(keys[%zu]=%llu)=%zu, expected %zu, window [%zu,%zu)",
+            what, keys.size(), eps, I, i, (unsigned long long)keys[i], got, pos, w.lo, w.hi);
+      return;
+    }
+  }
+  // Spot-check against std::lower_bound on the whole array (independent of `pos` logic).
+  for (size_t i = 0; i < keys.size(); i += 1 + keys.size() / 97) {
+    const size_t ref = std::lower_bound(keys.begin(), keys.end(), keys[i]) - keys.begin();
+    CHECK(idx.lookup(keys[i]) == ref, "%s ref check i=%zu", what, i);
+  }
+}
+
 static std::vector<std::pair<size_t, size_t>> configs(size_t eps) {
   // (eps, I) pairs covering I = 1, small I, I = eps, and the extreme I = eps + 1.
   std::vector<size_t> Is = {1, 2, eps / 2 + 1, eps, eps + 1};
@@ -57,6 +83,7 @@ static std::vector<std::pair<size_t, size_t>> configs(size_t eps) {
 }
 
 // Builds the model and checks every invariant plus the exhaustive error bound.
+static void check_lookups(const Keys&, size_t, size_t, SampleEBPLA::Bound, const char*);
 static void check_model(const Keys& keys, size_t eps, size_t I, const char* what,
                         bool verbose = false) {
   SampleEBPLA m(keys.data(), keys.size(), eps, I);
@@ -84,6 +111,7 @@ static void check_model(const Keys& keys, size_t eps, size_t I, const char* what
     }
     prev = p;
   }
+  check_lookups(keys, eps, I, SampleEBPLA::Bound::kTightened, what);
   if (verbose)
     std::printf("    %-22s n=%-9zu eps=%-4zu I=%-4zu segs=%-7zu max_err=%-4llu mean_err=%.2f\n",
                 what, keys.size(), eps, I, m.num_segments(),
@@ -339,6 +367,7 @@ static void test_untightened_mode() {
         const auto st = max_error(m, k.data(), k.size());
         CHECK(st.max_error <= eps + I - 1, "untightened eps=%zu I=%zu max_err=%llu", eps, I,
               (unsigned long long)st.max_error);
+        check_lookups(k, eps, I, SampleEBPLA::Bound::kUntightened, "untightened lookup");
       }
 }
 

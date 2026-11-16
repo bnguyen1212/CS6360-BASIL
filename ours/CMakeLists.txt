@@ -29,3 +29,7 @@ add_executable(spgm_probe blackbox/spgm_probe.cc)
 target_include_directories(spgm_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_options(spgm_probe PRIVATE -ffast-math -march=native -w)
 target_link_libraries(spgm_probe PRIVATE OpenMP::OpenMP_CXX Threads::Threads)
+
+# Lookup correctness + latency for the two-level index (G2). See ours/bench/lookup_bench.cc.
+add_executable(lookup_bench bench/lookup_bench.cc)
+target_compile_options(lookup_bench PRIVATE -Wall -Wextra -march=native)

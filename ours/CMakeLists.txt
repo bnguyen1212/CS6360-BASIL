@@ -15,3 +15,7 @@ target_compile_options(test_sample_eb_pla PRIVATE -Wall -Wextra -march=native)
 
 enable_testing()
 add_test(NAME test_sample_eb_pla COMMAND test_sample_eb_pla)
+
+# Build-time + exhaustive-error benchmark (G1). See ours/bench/pla_bench.cc for usage.
+add_executable(pla_bench bench/pla_bench.cc)
+target_compile_options(pla_bench PRIVATE -Wall -Wextra -march=native)

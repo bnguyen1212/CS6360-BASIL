@@ -236,3 +236,31 @@ Toolchain: Ubuntu clang 18.1.3, cmake 3.28.3.
   | 16  | 17  | 293,867| 16  | 1.72  |
   At I close to eps+1, the tightened delta (1 or 0) forces many more segments. This
   is the size cost of sampling.
+
+## G1 results: Sample EB-PLA on history, eps = 256 (2026-11-15), in `results/g1/`
+- `./build/ours/pla_bench data/history_200M_uint64 <10000000|all> 256 results/g1/pla.csv 1 16 64 256`
+  (clang 18, `-O3 -DNDEBUG`). The keys are loaded once with `ours::load_sosd_keys`,
+  not the harness loader. There are 3 timed builds per I. Build time covers sampling,
+  anchor points and the cone fit; it excludes loading. The bench checks that all 3
+  builds are identical, then computes the max error over every key once. Raw rows
+  are in `pla.csv`; stdout and `time -v` output are in `pla_10M.log` / `pla_200M.log`.
+- **0 failures.** Max error is <= 256 over every key in all 8 configs.
+
+| keys | I | build ms (3 runs) | median | vs I=1 | segments | bytes | max err |
+|---|---:|---|---:|---:|---:|---:|---:|
+| 10M | 1 | 310.4 / 191.1 / 221.9 | 221.9 | 1.0x | 140 | 5,600 | 256 |
+| 10M | 16 | 21.7 / 25.6 / 25.9 | 25.6 | 8.7x | 146 | 5,840 | 251 |
+| 10M | 64 | 10.0 / 8.7 / 11.2 | 10.0 | 22.1x | 204 | 8,160 | 241 |
+| 10M | 256 | 4.7 / 4.0 / 3.9 | 4.0 | 55.1x | 18,472 | 738,880 | 218 |
+| 200M | 1 | 9066 / 11655 / 6144 | 9066 | 1.0x | 10,609 | 424,360 | 256 |
+| 200M | 16 | 599 / 956 / 554 | 599 | 15.1x | 11,144 | 445,760 | 255 |
+| 200M | 64 | 255 / 269 / 215 | 255 | 35.6x | 13,676 | 547,040 | 252 |
+| 200M | 256 | 111 / 96 / 93 | 96 | 94.2x | 373,805 | 14,952,200 | 253 |
+
+- **Peak RSS on 200M is 7.45 GiB, set by I=1.** The build materializes the sample
+  vector and the anchor-point vector at 16 B per key each (~6.4 GB) on top of the
+  1.6 GB of keys. That much allocation probably also explains why the I=1 build
+  times are noisy (6.1–11.7 s). Fitting in a streaming pass would cut memory to
+  O(segments), and the I=1 baseline time would then stop including the allocation
+  of two 3.2 GB vectors. We should decide this before comparing build times against BASIL.
+- The model costs 40 B per segment (a 32 B `Segment` plus an 8 B first key).

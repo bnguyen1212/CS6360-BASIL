@@ -59,7 +59,11 @@ Sample EB-Histogram / CHT is NOT in scope today.
   Test synthetic data (uniform, skewed, many duplicates, tiny arrays, n not divisible
   by I) and the history slices.
 - Comment the algorithm clearly. Every team member must be able to explain this code.
-- Commit after each working step with a clear message.
+- Commit after each working step with a clear message. Do NOT add `Co-Authored-By`
+  (or any other AI attribution) lines to commit messages or PR descriptions; commits are
+  authored by the team member alone. This is intentional.
+- Team-facing status lives in `TEAM_CATCHUP.md` (repo root). Update it when a milestone,
+  key number, or the next-steps list changes; `NOTES.md` stays the detailed log.
 
 ## Workflow
 - Iterate on a small slice (first 10M keys of `history`); use all 200M keys only for

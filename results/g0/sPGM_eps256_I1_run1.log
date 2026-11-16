@@ -1,0 +1,30 @@
+Repeating lookup code 1 time(s).
+Using 1 thread(s).
+Only executing indexes matching sPGM
+read 200000000 values from ./data/history_200M_uint64 in 19823 ms (10.0893 M values/s)
+data is unique
+read 10000000 values from ./data/history_200M_uint64_equality_lookups_10M in 2251 ms (4.44247 M values/s)
+RESULT: sPGM,256/1/4/1,137256,8192116671,2253.165334
+	Command being timed: "build/g0bin/benchmark_spgm_I1 ./data/history_200M_uint64 ./data/history_200M_uint64_equality_lookups_10M --only sPGM"
+	User time (seconds): 44.34
+	System time (seconds): 56.70
+	Percent of CPU this job got: 98%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:42.67
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 12817460
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 4642586
+	Voluntary context switches: 2
+	Involuntary context switches: 741
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 24
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

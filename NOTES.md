@@ -7,14 +7,14 @@ from reading the code and hasn't been run yet.
 - WSL2 on an Intel i3-1115G4 (4 threads), x86_64. `.wslconfig` sets `memory=16GB`;
   `free` shows 15 GiB RAM and 4 GiB swap. About 938 GB of free disk.
 - Installed: g++, make, wget, md5sum, python3.
-- **Missing:** clang, cmake, zstd, Boost headers.
+- Missing at first look: clang, cmake, zstd, Boost headers (installed since).
 
 ## 1. Build (Release)
 Prerequisites (Boost is needed because `dtl/` headers include it; zstd and m4 are
 in the upstream README; zstd is only used by the 800M downloads):
 ```bash
 sudo apt -y update
-sudo apt -y install clang cmake zstd m4 libboost-all-dev
+sudo apt -y install clang cmake zstd m4 libboost-all-dev libomp-dev
 pip3 install -r requirements.txt   # only needed for the plotting scripts
 ```
 Build with clang (`scripts/prepare.sh` does the same thing but uses the default
@@ -50,7 +50,14 @@ cd ..
   ```
   The download has no checksum, and `download.sh` uses `-nc`, which keeps a partial
   file. Verify the result: size should be 1,600,000,008 bytes, and
-  `od -An -tu8 -N8 data/history_200M_uint64` should print `200000000` (unverified).
+  `od -An -tu8 -N8 data/history_200M_uint64` should print `200000000`.
+- **Downloaded (2026-11-15):** `data/history_200M_uint64`, SOSD format: 8-byte uint64
+  count header (`200000000`) followed by 200M uint64 keys. File size
+  1,600,000,008 bytes (verified with `stat` and `od`).
+  **The downloaded file was NOT sorted.** When `generate` ran (19:37), it printed
+  "keys have to be sorted … Overwrite sorted keys" and rewrote the file sorted, in
+  place. The local copy is now sorted. Anyone who re-downloads must run `generate`
+  (or sort the file) before benchmarking.
 - Format (`util::load_data`): a uint64 count `N` as the header, then `N` raw
   little-endian uint64 keys. No values are stored. The key type comes from the
   filename suffix (`_uint64`). The harness requires sorted keys and allows
@@ -156,4 +163,37 @@ Allowed to read: `benchmark.h`, `benchmark.cc`, `util.h`, `generate.cc`, `config
 - **Builds:** `-DUSER=ON` is light. The reproduce macros (`SPEEDUP`,
   `DESIGNSPACE`) instantiate hundreds of templates in a single translation unit,
   so expect high compiler RAM and use `-j` ≤ 4.
-- **Peak memory, history 200M:** _TODO (G0)_
+- **Peak memory, history 200M (G0, measured with `/usr/bin/time -v`):**
+  `benchmark` uses **12.2 GiB (12,517 MB) max RSS** for every index and config
+  (BS and sPGM eps=256 at I=1/16/64/256, 3 runs each, spread under 1 MB). The
+  harness's own copies of the data dominate; the sPGM index is only 124–137 KB.
+  That is 78% of the 15.6 GiB VM, leaving about 3.4 GiB of headroom. `generate`
+  uses 6.4 GiB. There were no major page faults and no swap use.
+
+## Build/environment fixes and harness edits (log every one)
+Toolchain: Ubuntu clang 18.1.3, cmake 3.28.3.
+1. `dtl/thread.hpp`: added `#include <functional>`. It uses `std::function`, which
+   newer libstdc++ no longer pulls in transitively (`fatal error: no template named 'function'`).
+2. Environment: clang accepts `-fopenmp`, but `omp.h` is missing until you install
+   `libomp-dev`. `indexes/sPGM-index/.../piecewise_linear_model_sampling.hpp` includes it.
+   Fix: `sudo apt -y install libomp-dev` (add it to the prerequisites in §1).
+3. Config (not a build fix): the `#ifdef USER` block of `benchmarks/benchmark_spgm.h` was
+   changed from `sPGM<uint64_t,16,1,4,1>` to four runs at eps_b=256 with
+   I_b = 1, 16, 64, 256. The upper level stays at the USER default (eps_u=4, I_u=1).
+   For G0, `results/g0/run_g0.sh` builds one binary per I (`build/g0bin/`) by temporarily
+   leaving a single line in that block, then restores the 4-line version.
+
+## G0 results (2026-11-15), in `results/g0/`
+- Configuration: clang 18 Release, `-DUSER=ON`, history 200M, 10M positive lookups,
+  `--only BS|sPGM`, 1 lookup repeat per process, 3 processes per config.
+  `summary.csv` has one row per process. The `*_runN.log` files hold the raw stdout
+  and `time -v` output. `driver.log` holds the build and run output.
+- All 15 runs passed the harness checksum (none reported `fail`).
+- **These timings are not usable as performance numbers.** Binary search measured
+  2.0–10.0 µs per lookup and sPGM 0.66–2.25 µs. The sPGM build time for a single
+  config varied by up to 15x (for example, I=256 ranged from 0.65 s to 10.2 s).
+  The 200M-key load took anywhere from 1.1 s to 19.8 s, and sys time was often
+  higher than user time. The likely cause is host/VM memory pressure: a 12.2 GiB
+  process in a 16 GB WSL2 VM, competing with Windows. This is not yet verified.
+  Before timing seriously, close other Windows apps, check for CPU throttling (a
+  laptop i3), and consider more runs. The memory and size numbers are stable.

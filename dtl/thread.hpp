@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>  // BASIL fork: needed by std::function with newer libstdc++
 #include <bitset>
 #include <chrono>
 #include <mutex>

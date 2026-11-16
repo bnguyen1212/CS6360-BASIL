@@ -16,7 +16,10 @@ void benchmark_64_spgm(sosd::Benchmark<uint64_t, Searcher>& benchmark) {
  * the #ifdef and #endif blocks and use it without additional compile macro options.
 */
 #ifdef USER 
-  benchmark.template Run<sPGM<uint64_t, 16, 1, 4, 1>>();
+  benchmark.template Run<sPGM<uint64_t, 256, 1, 4, 1>>();
+  benchmark.template Run<sPGM<uint64_t, 256, 16, 4, 1>>();
+  benchmark.template Run<sPGM<uint64_t, 256, 64, 4, 1>>();
+  benchmark.template Run<sPGM<uint64_t, 256, 256, 4, 1>>();
 #endif
 #ifdef PERF // Section 5.1
   benchmark.template Run<sPGM<uint64_t, 4, 1, 4, 1>>();

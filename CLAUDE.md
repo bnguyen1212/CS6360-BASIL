@@ -59,7 +59,10 @@ Sample EB-Histogram / CHT is NOT in scope today.
 ## Workflow
 - Iterate on a small slice (first 10M keys of `history`); use all 200M keys only for
   validation and timing.
-- ~16 GB RAM: never load more than one 200M-key dataset at once. Build with Release
+- ~16 GB RAM: never load more than one 200M-key dataset at once. Our standalone
+  benchmark/validation loads exactly ONE copy of the keys (~1.6 GB for 200M) with our own
+  loader (`ours/`), never the harness's `util::load_data`/`sosd::Benchmark` (which hold
+  ~12 GB). Our code takes `const uint64_t* keys, size_t n` and never copies the key array. Build with Release
   flags (-O3, NDEBUG) for any timing run.
 - Timing results: at least 3 runs per configuration, raw rows to CSV under `results/`.
 - Record setup facts (machine, build commands, dataset paths, peak memory) in NOTES.md.

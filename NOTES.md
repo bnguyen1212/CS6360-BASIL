@@ -197,3 +197,42 @@ Toolchain: Ubuntu clang 18.1.3, cmake 3.28.3.
   process in a 16 GB WSL2 VM, competing with Windows. This is not yet verified.
   Before timing seriously, close other Windows apps, check for CPU throttling (a
   laptop i3), and consider more runs. The memory and size numbers are stable.
+
+## G1: our code in `ours/` (2026-11-15)
+- Build and test (a standalone CMake project; the harness build is untouched):
+  ```bash
+  CC=clang CXX=clang++ cmake -S ours -B build/ours -DCMAKE_BUILD_TYPE=Release
+  cmake --build build/ours -j4
+  ./build/ours/test_sample_eb_pla                                  # synthetic, ~10 s
+  ./build/ours/test_sample_eb_pla data/history_200M_uint64 10000000 # + first 10M history keys
+  ```
+- Files: `sampler.h` (systematic sampler), `sample_eb_pla.h` (Sample EB-PLA plus the
+  correctness argument in its header comment), `error.h` (exhaustive max error over
+  every key), `sosd_io.h` (our single-copy loader), and `tests/test_sample_eb_pla.cc`.
+- **PLA used: greedy shrinking cone.** Each segment passes exactly through its first
+  point, and slopes are restricted to >= 0. This is not the optimal PLA, so segment
+  counts will be higher than BASIL's sPGM at the same eps and I.
+- Two design decisions that the proof depends on (see `sample_eb_pla.h`):
+  1. **Duplicates.** Each distinct sampled key v gets the point (v, lower_bound(v)). If
+     v's duplicate run started before its sample index, it ALSO gets (v+1, H(v)),
+     where H(v) is the last sample index holding v. On unique data (history is
+     unique) this reduces to plain (key[j*I], j*I).
+  2. **Boundary gap.** A key between the last point of segment g and the first point
+     of g+1 is predicted by extrapolating segment g. The prediction is clamped to the
+     y of g+1's first point.
+- Ablation (done in the scratchpad, not committed): removing the clamp makes the
+  tests fail with errors up to 918 at eps=1, and on plain uniform data too.
+  Removing the (v+1, H(v)) point makes the duplicate tests fail with errors up to 2000.
+- Results: 7,000,121 synthetic checks, 0 failures. On the history slice (first 10M
+  keys) max error <= eps in every config, and the process peaked at 446 MB RSS:
+
+  | eps | I | segments | max err | mean err |
+  |----:|----:|-------:|----:|------:|
+  | 256 | 1   | 140    | 256 | 90.60 |
+  | 256 | 16  | 146    | 251 | 86.27 |
+  | 256 | 64  | 204    | 241 | 70.27 |
+  | 256 | 256 | 18,472 | 218 | 7.94  |
+  | 16  | 1   | 14,646 | 16  | 5.79  |
+  | 16  | 17  | 293,867| 16  | 1.72  |
+  At I close to eps+1, the tightened delta (1 or 0) forces many more segments. This
+  is the size cost of sampling.
